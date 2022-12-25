@@ -2,6 +2,7 @@ package schat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 )
 
 // chatServer enables broadcasting to a set of subscribers.
@@ -58,8 +60,13 @@ func NewChatServer() *chatServer {
 // Messages are sent on the msgs channel and if the client
 // cannot keep up with the messages, closeSlow is called.
 type subscriber struct {
-	msgs      chan []byte
+	msgs      chan MsgForm
 	closeSlow func()
+}
+
+type MsgForm struct {
+	Msg  string `json:"msg"`
+	Name string `json:"name"`
 }
 
 func (cs *chatServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -98,13 +105,18 @@ func (cs *chatServer) publishHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := http.MaxBytesReader(w, r.Body, 8192)
-	msg, err := ioutil.ReadAll(body)
+	jsonData, err := ioutil.ReadAll(body)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
 		return
 	}
-
-	cs.publish(msg)
+	var MsgForm MsgForm
+	err = json.Unmarshal(jsonData, &MsgForm)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusRequestEntityTooLarge)
+		return
+	}
+	cs.publish(MsgForm)
 
 	w.WriteHeader(http.StatusAccepted)
 }
@@ -121,7 +133,7 @@ func (cs *chatServer) subscribe(ctx context.Context, c *websocket.Conn) error {
 	ctx = c.CloseRead(ctx)
 
 	s := &subscriber{
-		msgs: make(chan []byte, cs.subscriberMessageBuffer),
+		msgs: make(chan MsgForm, cs.subscriberMessageBuffer),
 		closeSlow: func() {
 			c.Close(websocket.StatusPolicyViolation, "connection too slow to keep up with messages")
 		},
@@ -145,7 +157,7 @@ func (cs *chatServer) subscribe(ctx context.Context, c *websocket.Conn) error {
 // publish publishes the msg to all subscribers.
 // It never blocks and so messages to slow subscribers
 // are dropped.
-func (cs *chatServer) publish(msg []byte) {
+func (cs *chatServer) publish(msg MsgForm) {
 	cs.subscribersMu.Lock()
 	defer cs.subscribersMu.Unlock()
 
@@ -174,9 +186,9 @@ func (cs *chatServer) deleteSubscriber(s *subscriber) {
 	cs.subscribersMu.Unlock()
 }
 
-func writeTimeout(ctx context.Context, timeout time.Duration, c *websocket.Conn, msg []byte) error {
+func writeTimeout(ctx context.Context, timeout time.Duration, c *websocket.Conn, msg MsgForm) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	return c.Write(ctx, websocket.MessageText, msg)
+	return wsjson.Write(ctx, c, msg)
 }

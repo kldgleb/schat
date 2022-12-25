@@ -1,57 +1,43 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"log"
-	"net/http"
+	"os"
+	"os/signal"
+	"schat"
 	"time"
 
 	"nhooyr.io/websocket"
 )
 
 const (
-	TextType = iota + 1
-	BinaryType
+	subAddr = "ws://localhost:8080/subscribe"
+	pubAddr = "http://localhost:8080/publish"
 )
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+	msgCh := make(chan string, 16)
+	subcribedCh := make(chan struct{})
+	client := schat.NewWsClient(ctx, msgCh, "client")
+	errc := make(chan error, 1)
+	go func() {
+		errc <- client.Subscribe(ctx, subAddr, &websocket.DialOptions{}, subcribedCh)
+	}()
+	<-subcribedCh
 
-	c, _, err := websocket.Dial(ctx, "ws://localhost:8080/subscribe", nil)
-	if err != nil {
-		panic(err)
+	client.Publish(ctx, pubAddr, "test")
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt)
+	select {
+	case err := <-errc:
+		client.Shutdown()
+		log.Printf("failed to serve: %v", err)
+	case sig := <-sigs:
+		client.Shutdown()
+		log.Printf("terminating: %v", sig)
 	}
-	defer c.Close(websocket.StatusInternalError, "Internal error")
-
-	err = publish()
-	if err != nil {
-		panic(err)
-	}
-
-	for {
-		_, str, err := c.Read(ctx)
-		if err != nil {
-			panic(err)
-		}
-		log.Printf("received: %s", str)
-	}
-
-	c.Close(websocket.StatusNormalClosure, "")
-}
-
-func publish() error {
-	// values := map[string]string{"msg": "test"}
-	// json_data, err := json.Marshal(values)
-	// if err != nil {
-	// 	return err
-	// }
-	resp, err := http.Post("http://localhost:8080/publish", "application/json", bytes.NewBuffer([]byte("test")))
-	if err != nil {
-		return err
-	}
-	fmt.Println("Publish status code: ", resp.StatusCode)
-	return nil
 }
