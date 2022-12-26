@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os"
+	"os/signal"
 	"schat"
 	"schat/cli"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"nhooyr.io/websocket"
 )
 
 const (
@@ -15,9 +19,9 @@ const (
 
 func main() {
 	readyToChat := make(chan struct{})
-	msgCh := make(chan schat.MsgForm, 16)
+	chatMsgCh := make(chan schat.MsgForm)
 	sendCh := make(chan schat.MsgForm)
-	m := cli.NewMainModel(readyToChat, msgCh, sendCh)
+	m := cli.NewMainModel(readyToChat, chatMsgCh, sendCh)
 	p := tea.NewProgram(m)
 	go func() {
 		if _, err := p.Run(); err != nil {
@@ -25,34 +29,38 @@ func main() {
 		}
 	}()
 	<-readyToChat
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	subcribedCh := make(chan struct{})
+	msgCh := make(chan schat.MsgForm, 16)
+
+	client := schat.NewWsClient(ctx, msgCh, "client")
+	errc := make(chan error, 1)
+	go func() {
+		errc <- client.Subscribe(ctx, subAddr, &websocket.DialOptions{}, subcribedCh)
+	}()
+	<-subcribedCh
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt)
+App:
 	for {
-		msg := <-sendCh
-		var newMsg cli.NewMsg
-		p.Send(newMsg)
-		msgCh <- msg
+		select {
+		case err := <-errc:
+			client.Shutdown()
+			log.Printf("failed to serve: %v", err)
+			break App
+		case sig := <-sigs:
+			client.Shutdown()
+			log.Printf("terminating: %v", sig)
+			break App
+		case msg := <-sendCh:
+			client.Publish(ctx, pubAddr, msg)
+		case msg := <-msgCh:
+			var newMsg cli.NewMsg
+			p.Send(newMsg)
+			chatMsgCh <- msg
+		}
 	}
 }
-
-// ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-// 	defer cancel()
-// 	msgCh := make(chan string, 16)
-// 	subcribedCh := make(chan struct{})
-// 	client := schat.NewWsClient(ctx, msgCh, "client")
-// 	errc := make(chan error, 1)
-// 	go func() {
-// 		errc <- client.Subscribe(ctx, subAddr, &websocket.DialOptions{}, subcribedCh)
-// 	}()
-// 	<-subcribedCh
-
-// 	client.Publish(ctx, pubAddr, "test")
-
-// 	sigs := make(chan os.Signal, 1)
-// 	signal.Notify(sigs, os.Interrupt)
-// 	select {
-// 	case err := <-errc:
-// 		client.Shutdown()
-// 		log.Printf("failed to serve: %v", err)
-// 	case sig := <-sigs:
-// 		client.Shutdown()
-// 		log.Printf("terminating: %v", sig)
-// 	}

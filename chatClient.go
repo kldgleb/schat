@@ -11,7 +11,6 @@ import (
 	"nhooyr.io/websocket/wsjson"
 )
 
-
 type wsClient struct {
 	ctx   context.Context
 	msgCh chan MsgForm
@@ -44,7 +43,6 @@ func (c *wsClient) Subscribe(ctx context.Context, addr string, opts *websocket.D
 		}
 		select {
 		case c.msgCh <- msgForm:
-			fmt.Println("msg:", msgForm.Msg)
 			continue
 		case <-ctx.Done():
 			return nil
@@ -53,9 +51,8 @@ func (c *wsClient) Subscribe(ctx context.Context, addr string, opts *websocket.D
 	}
 }
 
-func (c *wsClient) Publish(ctx context.Context, addr, msg string) error {
-	values := map[string]string{"msg": "test"}
-	json_data, err := json.Marshal(values)
+func (c *wsClient) Publish(ctx context.Context, addr string, msg MsgForm) error {
+	json_data, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}

@@ -144,7 +144,7 @@ func (cs *chatServer) subscribe(ctx context.Context, c *websocket.Conn) error {
 	for {
 		select {
 		case msg := <-s.msgs:
-			err := writeTimeout(ctx, time.Second*5, c, msg)
+			err := writeTimeout(ctx, time.Second*10, c, msg)
 			if err != nil {
 				return err
 			}
