@@ -14,11 +14,11 @@ import (
 
 type wsClient struct {
 	ctx   context.Context
-	msgCh chan string
+	msgCh chan MsgForm
 	name  string
 }
 
-func NewWsClient(ctx context.Context, msgCh chan string, name string) *wsClient {
+func NewWsClient(ctx context.Context, msgCh chan MsgForm, name string) *wsClient {
 	return &wsClient{
 		ctx:   ctx,
 		msgCh: msgCh,
@@ -43,7 +43,7 @@ func (c *wsClient) Subscribe(ctx context.Context, addr string, opts *websocket.D
 			return err
 		}
 		select {
-		case c.msgCh <- msgForm.Msg:
+		case c.msgCh <- msgForm:
 			fmt.Println("msg:", msgForm.Msg)
 			continue
 		case <-ctx.Done():
