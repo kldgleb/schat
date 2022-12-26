@@ -8,13 +8,17 @@ import (
 	"net/http"
 
 	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
 )
 
 type wsClient struct {
 	ctx   context.Context
 	msgCh chan MsgForm
 	name  string
+}
+
+type MsgForm struct {
+	Msg  string `json:"msg"`
+	Name string `json:"name"`
 }
 
 func NewWsClient(ctx context.Context, msgCh chan MsgForm, name string) *wsClient {
@@ -37,10 +41,16 @@ func (c *wsClient) Subscribe(ctx context.Context, addr string, opts *websocket.D
 
 	for {
 		var msgForm MsgForm
-		err := wsjson.Read(ctx, conn, &msgForm)
+		_, data, err := conn.Read(ctx)
 		if err != nil {
 			return err
 		}
+		decrypted := decrypt(key, data)
+		err = json.Unmarshal([]byte(decrypted), &msgForm)
+		if err != nil {
+			return err
+		}
+
 		select {
 		case c.msgCh <- msgForm:
 			continue
@@ -56,6 +66,8 @@ func (c *wsClient) Publish(ctx context.Context, addr string, msg MsgForm) error 
 	if err != nil {
 		return err
 	}
+	json_data = encrypt(key, json_data)
+
 	client := http.Client{}
 	req, err := http.NewRequest("POST", addr, bytes.NewBuffer(json_data))
 	if err != nil {

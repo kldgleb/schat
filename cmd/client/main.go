@@ -34,9 +34,9 @@ func main() {
 	defer cancel()
 	subcribedCh := make(chan struct{})
 	msgCh := make(chan schat.MsgForm, 16)
-
 	client := schat.NewWsClient(ctx, msgCh, "client")
 	errc := make(chan error, 1)
+
 	go func() {
 		errc <- client.Subscribe(ctx, subAddr, &websocket.DialOptions{}, subcribedCh)
 	}()
