@@ -9,10 +9,16 @@ import (
 	"os/signal"
 	"schat"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	l, err := net.Listen("tcp", ":8080")
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("errror while reading env: %s", err.Error())
+	}
+
+	l, err := net.Listen("tcp", os.Getenv("SRV_PORT"))
 	if err != nil {
 		panic(err)
 	}

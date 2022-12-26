@@ -5,11 +5,23 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"io"
+	"log"
+	"os"
+
+	"github.com/joho/godotenv"
 )
 
-// cipher key
-var key = []byte("thisis32bitlongpassphraseimusing")
+var key []byte
 
+func init() {
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("errror while reading env: %s", err.Error())
+	}
+	k := os.Getenv("KEY")
+	key = []byte(k)
+}
+
+// cipher key
 func encrypt(key []byte, text []byte) []byte {
 	c, _ := aes.NewCipher(key)
 	gcm, _ := cipher.NewGCM(c)

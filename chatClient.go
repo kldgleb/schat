@@ -21,6 +21,7 @@ type MsgForm struct {
 	Name string `json:"name"`
 }
 
+
 func NewWsClient(ctx context.Context, msgCh chan MsgForm, name string) *wsClient {
 	return &wsClient{
 		ctx:   ctx,

@@ -9,15 +9,19 @@ import (
 	"schat/cli"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/joho/godotenv"
 	"nhooyr.io/websocket"
 )
 
-const (
-	subAddr = "ws://localhost:8080/subscribe"
-	pubAddr = "http://localhost:8080/publish"
-)
+const ()
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("errror while reading env: %s", err.Error())
+	}
+	subAddr := os.Getenv("SUB_ADDR")
+	pubAddr := os.Getenv("PUB_ADDR")
+	
 	readyToChat := make(chan struct{})
 	chatMsgCh := make(chan schat.MsgForm)
 	sendCh := make(chan schat.MsgForm)
